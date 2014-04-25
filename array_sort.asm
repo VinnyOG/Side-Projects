@@ -1,34 +1,64 @@
-; Hackerati backend coding assignment problem 1
+; Hackerati backend coding assignment problem
 ; Written as a bootloader in 16-bit real mode
 ; The array starts at sector two, after the magic boot number
 ; The size of the array (in ints) is stored in the word variable ARRAY_SIZE
 
-[org 0x7c00]               ;BIOS places us here upon boot
+[org 0x7c00]
 
 mov bp, 0x8000             ;Give our stack enough room above us
 mov sp, bp
 
 mov [BOOT_DEVICE], dl      ;BIOS puts our boot device into dl so we save this info
 
-jmp start                  ;Jump to code, leave a convenient space for some variables
+jmp Start                  ;Jump to code, leave a convenient space for some variables
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-ARRAY_SIZE: dw 256         ; This is the amount of ints we have (256 ints ==> 2 sectors)
+ARRAY_SIZE: dw 128         ; This is the amount of ints we have (256 ints ==> 2 sectors)
 BOOT_DEVICE: db 0          ; To know where we came from
 DISK_ERROR_MESSAGE:
-  db "Disk Error", 0       ; Friendly message in case we fail to get all the ints
+  db "Disk Error!", 0       ; Friendly message in case we fail to get all the ints
+DISK_READ_OKAY:
+  db "Disk Okay...", 10, 13, 0        ; Friendly message in case the memory is loaded properly
+PROGRAM_STARTING:
+  db "Program Starting...", 10, 13, 0 ; Self explanatory
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-start:                     ;Program starts here so variables can be easy to find
+Start:                     ;Program starts here so variables can be easy to find
 
 pusha                      ;Save any useful info BIOS gave us, just in case we want it later
+mov si, PROGRAM_STARTING
+call PrintString
 mov ax, [ARRAY_SIZE]
-mul ax, 4                  ;ints are 4 bytes
-div ax, 512                ;sectors are 512 bytes
-add ax, 1                  ;to account for potential leftovers. now ax holds the mount of sectors to read
+imul ax, 4                  ;ints are 4 bytes
+xor dx, dx                  ;zeros this out
+mov cx, 512                ;sectors are 512 bytes
+div cx
+add ax, 1                  ;to account for potential leftovers. now ax holds the mount of sectors to read (tested and working)
 
 mov bl, al
-call ReadSectors           ;read our sectors, a return means success and our numbers are at ARRAY_IN_MEMORY
+call ReadSectors           ;read our sectors, a return means success and our numbers are at ARRAY_IN_MEMORY,
+
+
+;keep current streak in al
+;use ah for direction (0=nothing,1=increasing,2=decreasing)
+;indices of runs will be kept as 16-bit words (we have room for one 128 of them at INDICES; so 200 bytes before ARRAY_IN_MEMORY)
+;when we are done print the start indices of the runs as well as the ints they contain
+
+.indices_left: dw ARRAY_SIZE
+.loop0:
+cmp word [.indices_left], 0
+je .done
+
+
+;do stuff here
+
+
+dec word [.indices_left]
+jmp .loop0
+
+.done:    ;Yay! now we need to print the results nicely
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
@@ -54,7 +84,7 @@ ret
 
 
 ;-------------------------------------------------------------
-.consecutive_down
+.consecutive_down:
 
 ;-------------------------------------------------------------
 
@@ -114,9 +144,11 @@ mov bx, ARRAY_IN_MEMORY    ; The address we want to load our data into
 int 0x13                   ; Invoke BIOS read routine
 
 jc disk_error              ; If the carry flag is set there was an error
-pop bx        
+pop bx
 cmp al, bl                 ; We chack to make sure the amount actually read is the amount we want
 jne disk_error
+mov si, DISK_READ_OKAY
+call PrintString
 popa
 ret                        ; If we get here then we succesfully read our sectors into memory
 
@@ -131,17 +163,20 @@ jmp $                      ; Hang the system after an error occured
 ; PrintString routine, pointer to string in si
 
 PrintString:
+pusha
 
+.loop:
 cmp byte [si], 0           ; Check for null terminating
-jne continue_printing      
+jne .continue_printing
+popa
 ret                        ; Return if that is the case for we are done
 
-continue_printing:
+.continue_printing:
 mov ax, [si]               ; put value of si as parameter (character should be in lower bytes of registers)
 mov ah, 0x0e               ; BIOS print character routine in ah, value in al should not be affected
 int 0x10                   ; Invoke BIOS print routine
 inc si                     ; Onto the next character
-jmp PrintString
+jmp .loop
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
@@ -150,6 +185,9 @@ jmp PrintString
 times 510-($-$$) db 0     ;pad space with 0s until magic number
 dw 0xaa55                 ;so BIOS knows we are a bootloader
 
-%include "array.txt"      ;this file contains our ints, each one in binary (Intel/AMD CPUs should be little endian)
+incbin "array.dat"      ;this file contains our ints, each one in binary (Intel/AMD CPUs should be little endian)
+times 4096 db 0x45       ;temporary place holder/padding to prevent disk read errors
 
+INDICES: times 128 dw 0   ;room for 128 16-bit indices
 ARRAY_IN_MEMORY: db 0     ;This gives us a usable address to load our array into
+
