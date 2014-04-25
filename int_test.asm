@@ -1,5 +1,7 @@
 [org 0x7c00]
 
+;                the array.dat file looks exactly like: 0x12345678, only these eight bytes (two ints)
+
 mov bp, 0x8000
 mov sp, bp
 
