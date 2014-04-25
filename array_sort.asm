@@ -29,7 +29,7 @@ add ax, 1                  ;to account for potential leftovers. now ax holds the
 
 mov bl, al
 call ReadSectors           ;read our sectors, a return means success and our numbers are at ARRAY_IN_MEMORY
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 ;
@@ -40,10 +40,51 @@ call ReadSectors           ;read our sectors, a return means success and our num
 CompareInt:
 
 pusha
-mov ax, [si]              ;First two bytes of first int
-mov bx, [si + 2]          ;Second two bytes of first int
-mov cx, [si + 4]          ;First two butes of second int
-mov dx, [si + 6]          ;Second two bytes of second int
+call .compare_bytes                ;si should already be set to our LSBs
+cmp cx, 1
+je .consecutive_up                 ; is consecutive up
+cmp cx, -1
+je .consecutive_down              ; is not consecutive down
+popa                               ;if they were not cought above they can not be consecutive
+mov cx, 0                          ;meaning they are not consecutive in anyway
+ret
+
+;-------------------------------------------------------------
+.consecutive_up:
+
+
+;-------------------------------------------------------------
+.consecutive_down
+
+;-------------------------------------------------------------
+
+.compare_bytes:           ;compares [si] and [si+2], sets cx to 1 if consecutive up, -1 if consecutive down and zero if
+                          ;same value, cx can be 2 to signify non of the above
+push ax
+push bx
+mov ax, [si]
+mov bx, [si + 2]
+sub ax, bx
+cmp ax, 0
+jne .not_equal
+mov cx, 0                 ;if they subtract to equal 0 then they are equal
+ret
+
+.not_equal:
+cmp ax, 1                ;if the remainder is one then ax was bigger than bx so consecutive down
+jne .not_bigger
+mov cx, -1               ;signifies consecutive down
+ret
+
+.not_bigger:
+cmp ax, -1               ;see if bx was bigger than ax
+jne .nothing
+mov cx, 1                ;signifies consecutive up
+ret
+
+.nothing:
+mov cx, 2             ; to signify nothing
+ret
 
                           ;Becasue we are in little endian, our memory and registers should look something like:
                           ;On disk (for example of course) [ 0x1 0x2 0x3 0x4 ] [ 0x5 0x6 0x7 0x8 ]
